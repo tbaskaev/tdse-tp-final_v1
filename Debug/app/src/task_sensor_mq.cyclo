@@ -1,3 +1,0 @@
-../app/src/task_sensor_mq.c:92:6:task_sensor_mq_init	4
-../app/src/task_sensor_mq.c:142:6:task_sensor_mq_update	2
-../app/src/task_sensor_mq.c:153:6:task_sensor_mq_statechart	13

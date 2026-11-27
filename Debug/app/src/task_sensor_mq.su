@@ -1,3 +1,0 @@
-../app/src/task_sensor_mq.c:92:6:task_sensor_mq_init	64	static,ignoring_inline_asm
-../app/src/task_sensor_mq.c:142:6:task_sensor_mq_update	24	static
-../app/src/task_sensor_mq.c:153:6:task_sensor_mq_statechart	40	static,ignoring_inline_asm

@@ -204,9 +204,9 @@ test3_tick_end:
 						acum += p_task_sensor_mq_dta->vector_leido[i];
 					}
 					if ( p_task_sensor_mq_cfg->identifier == ID_SENSOR_MQ4 ) {
-						LOGGER_LOG("MQ-4 PROMEDIO: %u\n", acum/RAFAGA_COUNT);
+						LOGGER_LOG("MQ-4 PROMEDIO: %lu\n", acum/RAFAGA_COUNT);
 					} else if ( p_task_sensor_mq_cfg->identifier == ID_SENSOR_MQ135 ) {
-						LOGGER_LOG("MQ-135 PROMEDIO: %u\n", acum/RAFAGA_COUNT);
+						LOGGER_LOG("MQ-135 PROMEDIO: %lu\n", acum/RAFAGA_COUNT);
 					}
 
 					p_task_sensor_mq_dta->valor_leido = acum/RAFAGA_COUNT;

@@ -41,43 +41,41 @@ extern "C" {
 #endif
 
 /********************** inclusions *******************************************/
+#include "sht30.h"
 
 /********************** macros ***********************************************/
-#define SHT_30_I2C_ADDR (0x44U << 1)
+#define SENSOR_SHT30_TICK_MAX 1000
+#define SENSOR_SHT30_WAIT_RX_INTERVAL 20
+#define SENSOR_SHT30_I2C_TIMEOUT 10
 
 /********************** typedef **********************************************/
 /* Events to excite Task Sensor */
-typedef enum task_sensor_sht30_ev { EV_SENSOR_SHT30_IDLE } task_sensor_ev_t;
+typedef enum task_sensor_sht30_ev { EV_SENSOR_SHT30_IDLE } task_sensor_sht30_ev_t;
 
 /* States of Task Sensor */
 typedef enum task_sensor_sht30_st { ST_SENSOR_SHT30_IDLE,
 									ST_SENSOR_SHT30_TRANSMITING,
 							        ST_SENSOR_SHT30_WAITING,
-									ST_SENSOR_SHT30_SENSING } task_sensor_st_t;
+									ST_SENSOR_SHT30_SENSING,
+									ST_SENSOR_SHT30_RECEIVING } task_sensor_sht30_st_t;
 
 typedef struct
 {
-	//GPIO_TypeDef *		gpio_port;
-	//uint16_t			pin;
-	//GPIO_PinState		pressed;
 	uint32_t			tick_max;
+	SHT30_handle_t 		*hSHT30;
 } task_sensor_sht30_cfg_t;
-
-typedef struct {
-	uint32_t temperatura;
-	uint32_t humedad_relativa;
-} task_sensor_sht30_data;
 
 typedef struct
 {
 	uint32_t				tick;
 	task_sensor_sht30_st_t	state;
 	task_sensor_sht30_ev_t	event;
-	task_sensor_sht30_data  datos;
-} task_sensor_dta_t;
+	SHT30_data_t  			datos;
+} task_sensor_sht30_dta_t;
 
 /********************** external data declaration ****************************/
-extern task_sensor_dta_t task_sensor_dta_list[];
+extern task_sensor_sht30_dta_t task_sensor_sht30_dta_list[];
+extern SHT30_handle_t hSHT30;
 
 /********************** external functions declaration ***********************/
 

@@ -48,18 +48,19 @@
 #include "task_sensor_sht30_attribute.h"
 
 /********************** macros and definitions *******************************/
-
 #define SENSOR_SHT30_CFG_QTY		(sizeof(task_sensor_sht30_cfg_list)/sizeof(task_sensor_sht30_cfg_t))
 #define SENSOR_SHT30_DTA_QTY		SENSOR_SHT30_CFG_QTY
 
-#define SENSOR_SHT30_TICK_MAX 1000
-
 /********************** internal data declaration ****************************/
+SHT30_handle_t hSHT30;
+
+
 const task_sensor_sht30_cfg_t task_sensor_sht30_cfg_list[] = {
-	{ SENSOR_SHT30_TICK_MAX }
+	{ SENSOR_SHT30_TICK_MAX, &hSHT30 }
 };
 
-task_sensor_dta_t task_sensor_sht30_dta_list[SENSOR_SHT30_DTA_QTY];
+task_sensor_sht30_dta_t task_sensor_sht30_dta_list[SENSOR_SHT30_DTA_QTY];
+
 
 /********************** internal functions declaration ***********************/
 void task_sensor_sht30_statechart(uint32_t index);
@@ -70,36 +71,38 @@ const char *p_task_sensor_sht30_ 		= "Non-Blocking Code";
 const char *p_task_sensor_sht30__ 		= "(Update by Time Code, period = 1mS)";
 
 /********************** external data declaration ****************************/
-volatile bool g_i2c_sht30_transmit_complete;
-
-
+extern I2C_HandleTypeDef hi2c1;
 
 /********************** external functions definition ************************/
 void task_sensor_sht30_init(void *parameters)
 {
 	uint32_t index;
-	task_sensor_dta_t *p_task_sensor_sht30_dta;
-	task_sensor_st_t state;
-	task_sensor_ev_t event;
+	task_sensor_sht30_dta_t *p_task_sensor_sht30_dta;
+	const task_sensor_sht30_cfg_t *p_task_sensor_sht30_cfg;
+	task_sensor_sht30_st_t state;
+	task_sensor_sht30_ev_t event;
 
 	/* Print out: Task Initialized */
 	LOGGER_INFO(" ");
-	LOGGER_INFO("  %s is running - Tick [mS] = %lu", GET_NAME(task_sensor_init), HAL_GetTick());
+	LOGGER_INFO("  %s is running - Tick [mS] = %lu", GET_NAME(task_sensor_sht30_init), HAL_GetTick());
 	LOGGER_INFO("   %s is a %s", GET_NAME(task_sensor_sht30), p_task_sensor_sht30);
 	LOGGER_INFO("   %s is a %s", GET_NAME(task_sensor_sht30), p_task_sensor_sht30_);
 	LOGGER_INFO("   %s is a %s", GET_NAME(task_sensor_sht30), p_task_sensor_sht30__);
 
-	for (index = 0; SENSOR_DTA_QTY > index; index++)
+	for (index = 0; SENSOR_SHT30_DTA_QTY > index; index++)
 	{
 		/* Update Task Sensor Data Pointer */
 		p_task_sensor_sht30_dta = &task_sensor_sht30_dta_list[index];
+		p_task_sensor_sht30_cfg = &task_sensor_sht30_cfg_list[index];
 
 		/* Init & Print out: Index & Task execution FSM */
 		state = ST_SENSOR_SHT30_IDLE;
-		p_task_sensor_sht30_dta->state = state;
-
 		event = EV_SENSOR_SHT30_IDLE;
+
+		p_task_sensor_sht30_dta->state = state;
 		p_task_sensor_sht30_dta->event = event;
+
+		SHT30_Init( p_task_sensor_sht30_cfg->hSHT30, &hi2c1 );
 
 		LOGGER_INFO(" ");
 		LOGGER_INFO("   %s = %lu   %s = %lu   %s = %lu",
@@ -126,8 +129,8 @@ void task_sensor_sht30_statechart(uint32_t index)
 	task_sensor_sht30_dta_t *p_task_sensor_sht30_dta;
 
 	/* Update Task Sensor Configuration & Data Pointer */
-	p_task_sensor_cfg = &task_sensor_cfg_list[index];
-	p_task_sensor_dta = &task_sensor_dta_list[index];
+	p_task_sensor_sht30_cfg = &task_sensor_sht30_cfg_list[index];
+	p_task_sensor_sht30_dta = &task_sensor_sht30_dta_list[index];
 
 	switch (p_task_sensor_sht30_dta->state)
 	{
@@ -139,29 +142,58 @@ void task_sensor_sht30_statechart(uint32_t index)
 		case ST_SENSOR_SHT30_WAITING:
 			p_task_sensor_sht30_dta->tick--;
 			if ( p_task_sensor_sht30_dta->tick == 0 ) {
-				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_TRANSMITING;
-				// TODO: SEND I2C REQUEST TO SHT30
-				// Codigo de gemini:
-				/*
-				 * dev->tx_buf[0] = SHT30_CMD_MEAS_HIGH_MSB;
-                 * dev->tx_buf[1] = SHT30_CMD_MEAS_HIGH_LSB;
-                 * dev->state = SHT30_STATE_TX_CMD;
-
-                 * if (HAL_I2C_Master_Transmit_IT(dev->hi2c, dev->dev_addr, dev->tx_buf, 2U) != HAL_OK) {
-                 *    dev->state = SHT30_STATE_ERROR;
-                 * }
-				 */
+				if ( SHT30_StartMeasurement( p_task_sensor_sht30_cfg->hSHT30 ) == SHT30_OK) {
+					p_task_sensor_sht30_dta->tick = SENSOR_SHT30_I2C_TIMEOUT;
+					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_TRANSMITING;
+				} else { // error
+					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
+				}
 			}
 			break;
 
 		case ST_SENSOR_SHT30_TRANSMITING:
-			if ( g_i2c_sht30_transmit_complete ) {
+			if ( p_task_sensor_sht30_cfg->hSHT30->transmit_complete ) {
+				p_task_sensor_sht30_cfg->hSHT30->transmit_complete = false;
+				p_task_sensor_sht30_dta->tick = SENSOR_SHT30_WAIT_RX_INTERVAL;
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_SENSING;
-				g_i2c_sht30_transmit_complete = false;
+			} else if (p_task_sensor_sht30_cfg->hSHT30->error ) {
+				p_task_sensor_sht30_cfg->hSHT30->error = false; // error
+				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
+			} else if ( --p_task_sensor_sht30_dta->tick == 0 ) {
+				SHT30_Abort(p_task_sensor_sht30_cfg->hSHT30);
+				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			}
+			break;
 
-		case ST_SENSOR_SHT30_SENSING:
+		case ST_SENSOR_SHT30_SENSING: // wait 20 ms for sht30 to get data
+			p_task_sensor_sht30_dta->tick--;
+			if ( p_task_sensor_sht30_dta->tick == 0 ) {
+				if ( SHT30_StartReceive( p_task_sensor_sht30_cfg->hSHT30 ) == SHT30_OK ) {
+					p_task_sensor_sht30_dta->tick = SENSOR_SHT30_I2C_TIMEOUT;
+					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_RECEIVING;
+				} else { // error
+					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
+				}
+			}
+			break;
+		case ST_SENSOR_SHT30_RECEIVING:
+			if ( p_task_sensor_sht30_cfg->hSHT30->receive_complete ) {
+				p_task_sensor_sht30_cfg->hSHT30->receive_complete = false;
 
+				if ( SHT30_GetData( p_task_sensor_sht30_cfg->hSHT30, &(p_task_sensor_sht30_dta->datos) ) == SHT30_OK ) {
+					// TODO: Send data to System
+					LOGGER_LOG("TEMP: %d\n", (int)p_task_sensor_sht30_dta->datos.temperatura );
+					LOGGER_LOG("HUME: %d\n", (int)p_task_sensor_sht30_dta->datos.humedad_relativa );
+				}
+
+				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
+			} else if (p_task_sensor_sht30_cfg->hSHT30->error ) { // error por interrupt
+				p_task_sensor_sht30_cfg->hSHT30->error = false;
+				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
+			} else if ( --p_task_sensor_sht30_dta->tick == 0 ) { // error por timeout
+				SHT30_Abort(p_task_sensor_sht30_cfg->hSHT30);
+				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
+			}
 			break;
 
 		default:

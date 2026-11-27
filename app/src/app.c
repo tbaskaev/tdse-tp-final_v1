@@ -48,6 +48,7 @@
 #include "task_actuator.h"
 #include "task_display.h"
 #include "task_sensor_mq.h"
+#include "task_sensor_sht30.h"
 
 /********************** macros and definitions *******************************/
 #define TASK_X_NOE_INI		0ul
@@ -74,9 +75,10 @@ typedef struct {
 /********************** internal data declaration ****************************/
 const task_cfg_t task_cfg_list[]	= {
 		//{task_sensor_init, 		task_sensor_update,		NULL},
-		{task_system_init, 		task_system_update,		NULL},
-		{task_actuator_init,	task_actuator_update,	NULL},
-		{task_sensor_mq_init, 	task_sensor_mq_update, 	NULL}
+		{task_system_init, 			task_system_update,			NULL},
+		{task_actuator_init,		task_actuator_update,		NULL},
+		{task_sensor_mq_init, 		task_sensor_mq_update, 		NULL},
+		{task_sensor_sht30_init, 	task_sensor_sht30_update, 	NULL}
 };
 
 #define TASK_QTY	(sizeof(task_cfg_list)/sizeof(task_cfg_t))
