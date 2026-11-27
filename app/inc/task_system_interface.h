@@ -50,7 +50,7 @@ extern "C" {
 
 /********************** external functions declaration ***********************/
 extern void init_event_task_system(void);
-extern void put_event_task_system(task_system_ev_t event);
+extern void put_event_task_system(task_system_ev_id_t event, void *data);
 extern task_system_ev_t get_event_task_system(void);
 extern bool any_event_task_system(void);
 

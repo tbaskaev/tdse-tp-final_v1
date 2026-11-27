@@ -101,6 +101,7 @@ void task_sensor_sht30_init(void *parameters)
 
 		p_task_sensor_sht30_dta->state = state;
 		p_task_sensor_sht30_dta->event = event;
+		p_task_sensor_sht30_dta->error_retry_count = 0;
 
 		SHT30_Init( p_task_sensor_sht30_cfg->hSHT30, &hi2c1 );
 
@@ -137,6 +138,7 @@ void task_sensor_sht30_statechart(uint32_t index)
 		case ST_SENSOR_SHT30_IDLE:
 			p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_WAITING;
 			p_task_sensor_sht30_dta->tick = p_task_sensor_sht30_cfg->tick_max;
+			//p_task_sensor_sht30_dta->error_retry_count = 0;
 			break;
 
 		case ST_SENSOR_SHT30_WAITING:
@@ -146,6 +148,7 @@ void task_sensor_sht30_statechart(uint32_t index)
 					p_task_sensor_sht30_dta->tick = SENSOR_SHT30_I2C_TIMEOUT;
 					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_TRANSMITING;
 				} else { // error
+					put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
 					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 				}
 			}
@@ -156,11 +159,18 @@ void task_sensor_sht30_statechart(uint32_t index)
 				p_task_sensor_sht30_cfg->hSHT30->transmit_complete = false;
 				p_task_sensor_sht30_dta->tick = SENSOR_SHT30_WAIT_RX_INTERVAL;
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_SENSING;
+				p_task_sensor_sht30_dta->error_retry_count = 0;
 			} else if (p_task_sensor_sht30_cfg->hSHT30->error ) {
 				p_task_sensor_sht30_cfg->hSHT30->error = false; // error
+				if ( p_task_sensor_sht30_dta->error_retry_count++ == SENSOR_SHT30_RETRY_MAX ) {
+					put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
+				}
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			} else if ( --p_task_sensor_sht30_dta->tick == 0 ) {
 				SHT30_Abort(p_task_sensor_sht30_cfg->hSHT30);
+				if ( p_task_sensor_sht30_dta->error_retry_count++ == SENSOR_SHT30_RETRY_MAX ) {
+					put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
+				}
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			}
 			break;
@@ -171,7 +181,11 @@ void task_sensor_sht30_statechart(uint32_t index)
 				if ( SHT30_StartReceive( p_task_sensor_sht30_cfg->hSHT30 ) == SHT30_OK ) {
 					p_task_sensor_sht30_dta->tick = SENSOR_SHT30_I2C_TIMEOUT;
 					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_RECEIVING;
+					p_task_sensor_sht30_dta->error_retry_count = 0;
 				} else { // error
+					if ( p_task_sensor_sht30_dta->error_retry_count++ == SENSOR_SHT30_RETRY_MAX ) {
+						put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
+					}
 					p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 				}
 			}
@@ -179,19 +193,27 @@ void task_sensor_sht30_statechart(uint32_t index)
 		case ST_SENSOR_SHT30_RECEIVING:
 			if ( p_task_sensor_sht30_cfg->hSHT30->receive_complete ) {
 				p_task_sensor_sht30_cfg->hSHT30->receive_complete = false;
+				p_task_sensor_sht30_dta->error_retry_count = 0;
 
 				if ( SHT30_GetData( p_task_sensor_sht30_cfg->hSHT30, &(p_task_sensor_sht30_dta->datos) ) == SHT30_OK ) {
-					// TODO: Send data to System
-					LOGGER_LOG("TEMP: %d\n", (int)p_task_sensor_sht30_dta->datos.temperatura );
-					LOGGER_LOG("HUME: %d\n", (int)p_task_sensor_sht30_dta->datos.humedad_relativa );
+					// send data to system
+					put_event_task_system(EV_SYS_TEMP_HUM_INFO, &(p_task_sensor_sht30_dta->datos) );
+					//LOGGER_LOG("TEMP: %d\n", (int)p_task_sensor_sht30_dta->datos.temperatura );
+					//LOGGER_LOG("HUME: %d\n\n", (int)p_task_sensor_sht30_dta->datos.humedad_relativa );
 				}
 
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			} else if (p_task_sensor_sht30_cfg->hSHT30->error ) { // error por interrupt
 				p_task_sensor_sht30_cfg->hSHT30->error = false;
+				if ( p_task_sensor_sht30_dta->error_retry_count++ == SENSOR_SHT30_RETRY_MAX ) {
+					put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
+				}
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			} else if ( --p_task_sensor_sht30_dta->tick == 0 ) { // error por timeout
 				SHT30_Abort(p_task_sensor_sht30_cfg->hSHT30);
+				if ( p_task_sensor_sht30_dta->error_retry_count++ == SENSOR_SHT30_RETRY_MAX ) {
+					put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
+				}
 				p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			}
 			break;
@@ -199,6 +221,7 @@ void task_sensor_sht30_statechart(uint32_t index)
 		default:
 
 			p_task_sensor_sht30_dta->tick  = p_task_sensor_sht30_cfg->tick_max;
+			//p_task_sensor_sht30_dta->error_retry_count = 0;
 			p_task_sensor_sht30_dta->state = ST_SENSOR_SHT30_IDLE;
 			p_task_sensor_sht30_dta->event = EV_SENSOR_SHT30_IDLE;
 

@@ -43,7 +43,6 @@
 /* Application & Tasks includes */
 #include "board.h"
 #include "app_it.h"
-#include "task_sensor.h"
 #include "task_system.h"
 #include "task_actuator.h"
 #include "task_display.h"

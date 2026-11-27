@@ -50,6 +50,7 @@
 #include "task_display_interface.h"
 #include "task_system_attribute.h"
 #include "task_system_interface.h"
+#include "sht30.h"
 
 /********************** macros and definitions *******************************/
 #define DEL_SYS_MIN			0ul
@@ -67,6 +68,8 @@ task_system_dta_t task_system_dta_list[SYSTEM_DTA_QTY];
 /********************** internal functions declaration ***********************/
 void task_system_normal_statechart(void);
 void task_system_setup_statechart(void);
+void task_system_falla_statechart(void);
+
 
 void task_system_set_mode(task_system_mode_t);
 
@@ -109,8 +112,18 @@ void task_system_init(void *parameters)
 		state = ST_SYS_IDLE;
 		p_task_system_dta->state = state;
 
-		event = EV_SYS_IDLE;
+		event.id = EV_SYS_IDLE,
+		event.data = NULL;
 		p_task_system_dta->event = event;
+
+		p_task_system_dta->period_actuator_tx = SYSTEM_DEFAULT_PERIOD;
+		p_task_system_dta->temperatura 		  = 0;
+		p_task_system_dta->humedad 			  = 0;
+		p_task_system_dta->gas     			  = 0;
+		p_task_system_dta->co2 				  = 0;
+		p_task_system_dta->variable_control   = &(p_task_system_dta->SYSTEM_DEFAULT_CONTROL_VAR);
+		p_task_system_dta->umbral   		  = SYSTEM_DEFAULT_UMBRAL;
+		p_task_system_dta->umbral_superado 	  = false;
 
 		b_event = false;
 		p_task_system_dta->flag = b_event;
@@ -118,7 +131,7 @@ void task_system_init(void *parameters)
 		LOGGER_INFO(" ");
 		LOGGER_INFO("   %s = %lu   %s = %lu   %s = %s",
 					GET_NAME(state), (uint32_t)state,
-					GET_NAME(event), (uint32_t)event,
+					GET_NAME(event), (uint32_t)event.id,
 					GET_NAME(b_event), (b_event ? "true" : "false"));
 	}
 
@@ -144,7 +157,7 @@ void task_system_update(void *parameters)
 
 		case FALLA:
 
-			task_system_setup_statechart(); // TODO: cambiar a FALLA
+			task_system_falla_statechart();
 
 			break;
 
@@ -173,20 +186,99 @@ void task_system_normal_statechart(void)
 	{
 		case ST_SYS_IDLE:
 			p_task_system_dta->state = ST_SYS_SENSING;
+			p_task_system_dta->tick = p_task_system_dta->period_actuator_tx;
+			// TODO: turn on green LED
 			break;
 
 		case ST_SYS_SENSING:
-			if ((true == p_task_system_dta->flag) && (EV_SYS_GAS_INFO == p_task_system_dta->event))
+			p_task_system_dta->tick--;
+			if ( true == p_task_system_dta->flag )
 			{
-				p_task_system_dta->flag = false;
+				if ( EV_SYS_TEMP_HUM_INFO == p_task_system_dta->event.id ) {
+					p_task_system_dta->flag = false;
+					SHT30_data_t* data = (SHT30_data_t*)(p_task_system_dta->event.data);
 
+					p_task_system_dta->temperatura = data->temperatura;
+					p_task_system_dta->humedad = data->humedad_relativa;
+				} else if ( EV_SYS_CO2_INFO == p_task_system_dta->event.id  ) {
+					p_task_system_dta->flag = false;
+					uint32_t* data = (uint32_t*)(p_task_system_dta->event.data);
+
+					p_task_system_dta->co2 = (((float)(*data))/3300) * 100;
+				} else if ( EV_SYS_GAS_INFO == p_task_system_dta->event.id  ) {
+					p_task_system_dta->flag = false;
+					uint32_t* data = (uint32_t*)(p_task_system_dta->event.data);
+
+					p_task_system_dta->gas = (((float)(*data))/3300) * 100;
+				} else if ( EV_SYS_SENSOR_ERROR == p_task_system_dta->event.id ) {
+					task_system_set_mode(FALLA);
+				}
 			}
-		default:
+			if ( p_task_system_dta->tick == 0 ) {
+				//TODO: send to actuator
+				LOGGER_LOG("TEMP: %d\n", (int)(p_task_system_dta->temperatura) );
+				LOGGER_LOG("HUME: %d\n", (int)(p_task_system_dta->humedad) );
+				LOGGER_LOG("CO2 : %d%s\n", (int)(p_task_system_dta->co2), "%%");
+				LOGGER_LOG("GAS : %d%s\n\n", (int)(p_task_system_dta->gas), "%%");
+				p_task_system_dta->tick = p_task_system_dta->period_actuator_tx;
+			}
 
+			if ( *(p_task_system_dta->variable_control) >= p_task_system_dta->umbral && !p_task_system_dta->umbral_superado) {
+				// TODO: send signal to actuator:
+				// - Turn on PWN LED
+				// - Buzzer
+				p_task_system_dta->umbral_superado = true;
+				LOGGER_LOG("\n\n------ UMBRAL SUPERADO ------\n\n");
+			}
+			if ( p_task_system_dta->umbral_superado && *(p_task_system_dta->variable_control) < p_task_system_dta->umbral ) {
+				p_task_system_dta->umbral_superado = false;
+				LOGGER_LOG("\n\n------ CRISIS EVITADA ------\n\n");
+			}
+
+
+			break;
+		default:
+			p_task_system_dta->state = ST_SYS_IDLE;
+			p_task_system_dta->event.id = EV_SYS_IDLE;
 
 			break;
 	}
 }
+
+
+void task_system_falla_statechart(void)
+{
+	task_system_dta_t *p_task_system_dta;
+
+	/* Update Task System Data Pointer */
+	p_task_system_dta = &task_system_dta_list[SETUP];
+
+	if (true == any_event_task_system())
+	{
+		p_task_system_dta->flag = true;
+		p_task_system_dta->event = get_event_task_system();
+	}
+
+	switch (p_task_system_dta->state)
+	{
+		case ST_SYS_IDLE:
+			/* TODO: Send Error To App via Bluetooth */
+			// Prender LED Amarillo
+			LOGGER_LOG("MODO ERROR\n");
+
+			break;
+
+		default:
+
+			p_task_system_dta->tick  = DEL_SYS_MIN;
+			p_task_system_dta->state = ST_SYS_IDLE;
+			p_task_system_dta->event.id = EV_SYS_IDLE;
+			p_task_system_dta->flag = false;
+
+			break;
+	}
+}
+
 
 void task_system_setup_statechart(void)
 {
@@ -234,7 +326,7 @@ void task_system_setup_statechart(void)
 
 			p_task_system_dta->tick  = DEL_SYS_MIN;
 			//p_task_system_dta->state = ST_SYS_IDLE;
-			p_task_system_dta->event = EV_SYS_IDLE;
+			p_task_system_dta->event.id = EV_SYS_IDLE;
 			p_task_system_dta->flag = false;
 
 			break;

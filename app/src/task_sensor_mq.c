@@ -49,15 +49,12 @@
 #include "task_sensor_mq_attribute.h"
 
 /********************** macros and definitions *******************************/
-//#define DEL_BTN_MIN		0ul
-//#define DEL_BTN_MED		25ul
-//#define DEL_BTN_MAX		50ul
-
 #define SENSOR_MQ_CFG_QTY		(sizeof(task_sensor_mq_cfg_list)/sizeof(task_sensor_mq_cfg_t))
 #define SENSOR_MQ_DTA_QTY		SENSOR_MQ_CFG_QTY
 
 #define TICK_MAX 1000
 #define RAFAGA_COUNT 10
+#define SENSOR_MQ_NOISE_LVL 50
 
 /********************** external data declaration ****************************/
 extern volatile bool 		g_adc1_b_trig_new_conversion;
@@ -72,8 +69,8 @@ extern ADC_HandleTypeDef 	hadc2;
 
 /********************** internal data declaration ****************************/
 const task_sensor_mq_cfg_t task_sensor_mq_cfg_list[] = {
-		{ ID_SENSOR_MQ4,   &hadc1, TICK_MAX }, // MQ 4
-		{ ID_SENSOR_MQ135, &hadc2, TICK_MAX } // MQ 135
+		{ ID_SENSOR_MQ4,   &hadc1, TICK_MAX }, // MQ 4 (A0)
+		{ ID_SENSOR_MQ135, &hadc2, TICK_MAX }  // MQ 135 (A1)
 };
 
 task_sensor_mq_dta_t task_sensor_mq_dta_list[SENSOR_MQ_DTA_QTY];
@@ -200,16 +197,20 @@ test3_tick_end:
 				if (b_done) {
 					uint32_t acum = 0;
 					for (uint32_t i = 0;i < RAFAGA_COUNT; i++) {
-						//LOGGER_LOG("%u\n",p_task_sensor_mq_dta->vector_leido[i] );
 						acum += p_task_sensor_mq_dta->vector_leido[i];
 					}
-					if ( p_task_sensor_mq_cfg->identifier == ID_SENSOR_MQ4 ) {
-						LOGGER_LOG("MQ-4 PROMEDIO: %lu\n", acum/RAFAGA_COUNT);
-					} else if ( p_task_sensor_mq_cfg->identifier == ID_SENSOR_MQ135 ) {
-						LOGGER_LOG("MQ-135 PROMEDIO: %lu\n", acum/RAFAGA_COUNT);
+					if ( acum/RAFAGA_COUNT < SENSOR_MQ_NOISE_LVL ) { // error de sensado
+						put_event_task_system(EV_SYS_SENSOR_ERROR, NULL );
+					} else {
+						if ( p_task_sensor_mq_cfg->identifier == ID_SENSOR_MQ4 ) {
+							p_task_sensor_mq_dta->valor_leido = acum/RAFAGA_COUNT;
+							put_event_task_system(EV_SYS_GAS_INFO, &(p_task_sensor_mq_dta->valor_leido) );
+						} else if ( p_task_sensor_mq_cfg->identifier == ID_SENSOR_MQ135 ) {
+							//LOGGER_LOG("MQ-135: %d\n", (int)(((((float)acum)/RAFAGA_COUNT)/3300)*100) );
+							p_task_sensor_mq_dta->valor_leido = acum/RAFAGA_COUNT;
+							put_event_task_system(EV_SYS_CO2_INFO, &(p_task_sensor_mq_dta->valor_leido) );
+						}
 					}
-
-					p_task_sensor_mq_dta->valor_leido = acum/RAFAGA_COUNT;
 					*(p_task_sensor_mq_dta->sample_idx) = 0;
 					p_task_sensor_mq_dta->state = ST_SENSOR_MQ_WAITING;
 					p_task_sensor_mq_dta->tick = p_task_sensor_mq_cfg->tick_max;

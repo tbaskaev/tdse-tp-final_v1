@@ -43,18 +43,27 @@ extern "C" {
 /********************** inclusions *******************************************/
 
 /********************** macros ***********************************************/
+#define SYSTEM_DEFAULT_PERIOD 2000
+#define SYSTEM_DEFAULT_UMBRAL 50
+#define SYSTEM_DEFAULT_CONTROL_VAR gas
 
 /********************** typedef **********************************************/
 /* Events to excite Task System */
-typedef enum task_system_ev {EV_SYS_IDLE,
+typedef enum task_system_ev_id {EV_SYS_IDLE,
 							 EV_SYS_GAS_INFO,
 							 EV_SYS_TEMP_HUM_INFO,
 							 EV_SYS_CO2_INFO,
 							 EV_SYS_SENSOR_ERROR,
 							 EV_SYS_APP_CONFIG,
 							 EV_SYS_APP_UMBRAL,
+							 EV_SYS_APP_PERIOD,
 							 EV_SYS_APP_EXIT_CONFIG
-							 } task_system_ev_t;
+							 } task_system_ev_id_t;
+typedef struct task_system_ev {
+	task_system_ev_id_t id;
+	void *data;
+} task_system_ev_t;
+
 
 /* State of Task System */
 typedef enum task_system_st {ST_SYS_IDLE,
@@ -68,6 +77,15 @@ typedef struct
 	task_system_st_t	state;
 	task_system_ev_t	event;
 	bool				flag;
+	uint32_t			period_actuator_tx;
+	uint32_t			umbral;
+	float 				*variable_control;
+
+	bool 				umbral_superado;
+	float 				temperatura;
+	float				humedad;
+	float				gas;
+	float	 			co2;
 } task_system_dta_t;
 
 /********************** external data declaration ****************************/

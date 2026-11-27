@@ -46,7 +46,7 @@
 #include "task_system_attribute.h"
 
 /********************** macros and definitions *******************************/
-#define EMPTY			(255ul)
+#define EMPTY			255ul
 #define QUEUE_LENGTH	(16ul)
 #define ITEM_SIZE		(sizeof(task_system_ev_t))
 
@@ -76,15 +76,22 @@ void init_event_task_system(void)
 	event_task_system_queue.tail = 0;
 	event_task_system_queue.count = 0;
 
-	for (i = 0; i < QUEUE_LENGTH; i++)
-		event_task_system_queue.queue[i] = EMPTY;
+
+	for (i = 0; i < QUEUE_LENGTH; i++) {
+		event_task_system_queue.queue[i].id = EMPTY;
+		event_task_system_queue.queue[i].data = NULL;
+	}
 }
 
-void put_event_task_system(task_system_ev_t event)
+void put_event_task_system(task_system_ev_id_t event, void *data)
 {
 	event_task_system_queue.count++;
-	event_task_system_queue.queue[event_task_system_queue.head++] = event;
+	event_task_system_queue.queue[event_task_system_queue.head].id = event;
 
+	if ( data != NULL ) {
+		event_task_system_queue.queue[event_task_system_queue.head].data = data;
+	}
+	event_task_system_queue.head++;
 	if (QUEUE_LENGTH == event_task_system_queue.head)
 		event_task_system_queue.head = 0;
 }
@@ -95,7 +102,9 @@ task_system_ev_t get_event_task_system(void)
 
 	event_task_system_queue.count--;
 	event = event_task_system_queue.queue[event_task_system_queue.tail];
-	event_task_system_queue.queue[event_task_system_queue.tail++] = EMPTY;
+	event_task_system_queue.queue[event_task_system_queue.tail++].id = EMPTY;
+	event_task_system_queue.queue[event_task_system_queue.tail++].data = NULL;
+
 
 	if (QUEUE_LENGTH == event_task_system_queue.tail)
 		event_task_system_queue.tail = 0;

@@ -47,6 +47,7 @@ extern "C" {
 #define SENSOR_SHT30_TICK_MAX 1000
 #define SENSOR_SHT30_WAIT_RX_INTERVAL 20
 #define SENSOR_SHT30_I2C_TIMEOUT 10
+#define SENSOR_SHT30_RETRY_MAX 3
 
 /********************** typedef **********************************************/
 /* Events to excite Task Sensor */
@@ -71,6 +72,7 @@ typedef struct
 	task_sensor_sht30_st_t	state;
 	task_sensor_sht30_ev_t	event;
 	SHT30_data_t  			datos;
+	uint8_t 				error_retry_count;
 } task_sensor_sht30_dta_t;
 
 /********************** external data declaration ****************************/
